@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Any, ClassVar, Hashable, Callable
+from typing import Any, Callable, ClassVar, Hashable
 
 from abm1d.des.loop import VirtualEventLoop
 

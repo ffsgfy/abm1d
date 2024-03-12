@@ -2,8 +2,8 @@ import asyncio
 import functools
 import math
 import random
-from typing import Iterable, TypeVar
 from collections.abc import Sequence
+from typing import Iterable, TypeVar
 
 from abm1d.utils import history  # noqa: F401
 

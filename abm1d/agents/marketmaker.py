@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 
 from abm1d import utils
-from abm1d.common import TraderAgent, PeriodicMarketAgent, ScalarIndicator
+from abm1d.common import PeriodicMarketAgent, ScalarIndicator, TraderAgent
 
 
 class MarketMakerAgent(TraderAgent, PeriodicMarketAgent):

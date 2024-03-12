@@ -5,10 +5,9 @@ import math
 import random
 from typing import assert_never
 
-
 from abm1d import utils
+from abm1d.common import PeriodicMarketAgent, ScalarIndicator, TraderAgent
 from abm1d.exchange import OrderSide
-from abm1d.common import TraderAgent, PeriodicMarketAgent, ScalarIndicator
 
 
 class ChartistAgent(TraderAgent, PeriodicMarketAgent):

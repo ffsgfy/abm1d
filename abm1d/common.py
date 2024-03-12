@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import itertools
 import math
 import random
-import itertools
 from collections import deque
 from typing import cast, overload
 
 import pandas as pd
 
 from abm1d import utils
+from abm1d.des import Agent, Entity, PeriodicAgent, Simulation, VirtualEventLoop
 from abm1d.exchange import Account, Exchange
-from abm1d.des import Simulation, Agent, PeriodicAgent, Entity, VirtualEventLoop
 
 
 class MarketSimulation(Simulation):

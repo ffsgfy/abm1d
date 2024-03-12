@@ -1,15 +1,8 @@
 import contextvars
 import heapq
-from asyncio import (
-    AbstractEventLoop,
-    Future,
-    Task,
-    TimerHandle,
-    ensure_future,
-    events,
-)
-from collections.abc import Coroutine, Awaitable, Callable
-from typing import Any, Unpack, TypeVarTuple, TypeAlias
+from asyncio import AbstractEventLoop, Future, Task, TimerHandle, ensure_future, events
+from collections.abc import Awaitable, Callable, Coroutine
+from typing import Any, TypeAlias, TypeVarTuple, Unpack
 
 ExceptionHandlerT: TypeAlias = Callable[[AbstractEventLoop, dict[str, Any]], Any]
 ArgsT = TypeVarTuple("ArgsT")
@@ -116,6 +109,7 @@ class VirtualEventLoop(AbstractEventLoop):
                 return await coro
             except BaseException as e:
                 self._exception = e
+
         return Task(wrapper(), loop=self, name=name, context=context)
 
     def get_exception_handler(self) -> ExceptionHandlerT | None:

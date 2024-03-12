@@ -6,7 +6,7 @@ import pandas as pd
 from scipy import stats
 
 from abm1d import utils
-from abm1d.common import Indicator, ScalarIndicator, HistoryIndicator
+from abm1d.common import HistoryIndicator, Indicator, ScalarIndicator
 
 
 class MarketPrices(Indicator):

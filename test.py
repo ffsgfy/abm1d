@@ -1,27 +1,23 @@
-import time
 import random
+import time
 
 import matplotlib.pyplot as plt
 
-from abm1d.exchange import Exchange, Account
-from abm1d.common import (
-    Agent,
-    MarketSimulation,
-    EnvironmentAgent,
-)
-from abm1d.indicators import (
-    SentimentIndex,
-    ChandeMomentum,
-    PearsonCorrelation,
-    HistoricalVolatility,
-    MarketPrices,
-    MarketDepth,
-)
 from abm1d.agents import (
-    FundamentalistAgent,
     ChartistAgent,
+    FundamentalistAgent,
     MarketMakerAgent,
     RandomAgent,
+)
+from abm1d.common import Agent, EnvironmentAgent, MarketSimulation
+from abm1d.exchange import Account, Exchange
+from abm1d.indicators import (
+    ChandeMomentum,
+    HistoricalVolatility,
+    MarketDepth,
+    MarketPrices,
+    PearsonCorrelation,
+    SentimentIndex,
 )
 
 seed = hash(time.time())

@@ -2,11 +2,10 @@ import time
 import random
 
 import matplotlib.pyplot as plt
-import pandas as pd
-import numpy as np
 
 from abm1d.exchange import Exchange, Account
 from abm1d.common import (
+    Agent,
     MarketSimulation,
     EnvironmentAgent,
 )
@@ -42,6 +41,7 @@ environment = EnvironmentAgent(
 )
 environment.pregenerate_dividends(1000)
 sim = MarketSimulation(exchange=exchange, environment=environment)
+agent: Agent
 
 hist_prices = sim.track_indicator(MarketPrices(sim=sim), 1.0)
 hist_depth = sim.track_indicator(MarketDepth(sim=sim), 1.0)
@@ -156,7 +156,7 @@ for _ in range(marketmaker_count):
 duration = 500.0
 sim.run(duration)
 
-_, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, height_ratios=(5.0, 1.5, 1.0))
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, height_ratios=(5.0, 1.5, 1.0))
 ax1.plot(
     hist_prices.history()["timestamp"],
     hist_prices.history()["mid"],

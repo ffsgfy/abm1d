@@ -75,7 +75,7 @@ class MarketAgent(Agent):
         return self.sim.exchange
 
     @property
-    def environment(self) -> Exchange:
+    def environment(self) -> EnvironmentAgent:
         return self.sim.environment
 
 

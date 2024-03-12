@@ -6,7 +6,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Sequence
 
-from sortedcontainers import SortedList  # type: ignore[import-untyped]
+from sortedcontainers import SortedList
 
 from abm1d import utils
 from abm1d.des import Entity

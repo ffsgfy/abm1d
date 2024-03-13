@@ -2,6 +2,7 @@ import random
 import time
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from abm1d import events
 from abm1d.agents import (
@@ -152,7 +153,7 @@ for _ in range(marketmaker_count):
 
 duration = 500.0
 event_timestamp = 250.0
-sim.schedule_absolute(events.fundamental_value_shock(sim, -20.0), event_timestamp)
+# sim.schedule_absolute(events.fundamental_value_shock(sim, -20.0), event_timestamp)
 sim.run(duration)
 
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, height_ratios=(5.0, 1.5, 1.0))
@@ -195,10 +196,12 @@ ax2.plot(
 )
 ax2.legend()
 
-ax3.plot(
-    hist_depth.history()["timestamp"],
-    hist_depth.history()["total"],
-    label="Market depth",
+returns = hist_prices.history()["mid"].diff().iloc[1:]
+
+ax3.bar(
+    hist_prices.history()["timestamp"].iloc[1:],
+    returns.abs(),
+    label="Absolute returns",
 )
 ax3.legend()
 

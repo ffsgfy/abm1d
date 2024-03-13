@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import itertools
 import math
 import random
 from collections import deque
+from collections.abc import Awaitable
 from typing import cast, overload
 
 import pandas as pd
@@ -57,6 +59,22 @@ class MarketSimulation(Simulation):
             return ScalarHistoryIndicator(indicator=indicator, sim=self)
         else:
             return HistoryIndicator(indicator=indicator, sim=self)
+
+    def schedule_relative(self, event: Awaitable, delay: float) -> asyncio.Task:
+        async def wrapper():
+            try:
+                await asyncio.sleep(delay)
+                await event
+            except asyncio.CancelledError:
+                pass
+
+        return utils.background_task(self.loop.create_task(wrapper()))
+
+    def schedule_absolute(self, event: Awaitable, when: float) -> asyncio.Task:
+        delay = when - self.loop.time()
+        if delay < 0.0:
+            raise ValueError("Cannot schedule event in the past")
+        return self.schedule_relative(event, delay)
 
 
 class MarketAgent(Agent):

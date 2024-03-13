@@ -3,6 +3,7 @@ import time
 
 import matplotlib.pyplot as plt
 
+from abm1d import events
 from abm1d.agents import (
     ChartistAgent,
     FundamentalistAgent,
@@ -150,13 +151,15 @@ for _ in range(marketmaker_count):
     last_marketmaker = agent
 
 duration = 500.0
+event_timestamp = 250.0
+sim.schedule_absolute(events.fundamental_value_shock(sim, -20.0), event_timestamp)
 sim.run(duration)
 
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, height_ratios=(5.0, 1.5, 1.0))
 ax1.plot(
     hist_prices.history()["timestamp"],
     hist_prices.history()["mid"],
-    label="Mid",
+    label="Mid price",
     color="k",
 )
 ax1.fill_between(
@@ -169,10 +172,11 @@ ax1.fill_between(
 ax1.plot(
     hist_prices.history()["timestamp"],
     hist_prices.history()["fun"],
-    label="Fun",
+    label="Fundamental value",
     color="blue",
     alpha=0.5,
 )
+ax1.axvline(event_timestamp, color="k", linestyle="--", alpha=0.5)
 ax1.legend()
 
 ax2.axhline(y=0.0, color="k", linestyle="--")

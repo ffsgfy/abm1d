@@ -18,12 +18,14 @@ from abm1d.indicators import (
     HistoricalVolatility,
     MarketDepth,
     MarketPrices,
+    MarketReturn,
     PearsonCorrelation,
     SentimentIndex,
 )
+from abm1d.utils import history
 
 seed = hash(time.time())
-# seed = 125738502195212317
+seed = 1186796360058043791
 print("Seed:", seed)
 random.seed(seed)
 
@@ -37,12 +39,21 @@ environment = EnvironmentAgent(
     dividend_mult_std=0.005,
     dividend_access=1,
 )
-environment.pregenerate_dividends(1000)
+environment.pregenerate_dividends(500)
 sim = MarketSimulation(exchange=exchange, environment=environment)
 agent: Agent
 
-hist_prices = sim.track_indicator(MarketPrices(sim=sim), 1.0)
 hist_depth = sim.track_indicator(MarketDepth(sim=sim), 1.0)
+hist_prices = sim.track_indicator(MarketPrices(sim=sim), 1.0)
+hist_return = sim.track_indicator(
+    MarketReturn(prices=hist_prices, sim=sim), hist_prices
+)
+hist_return_vol = sim.track_indicator(
+    HistoricalVolatility(
+        target=hist_return, field="value", window=8.0, strict=False, sim=sim
+    ),
+    hist_return,
+)
 
 # Random
 random_action_weights = {
@@ -55,18 +66,18 @@ random_position_weights = {
     RandomAgent.Position.INSIDE_SPREAD: 0.3,
     RandomAgent.Position.OUTSIDE_SPREAD: 0.7,
 }
-random_count = 10
+random_count = 5
 for _ in range(random_count):
     account = Account(quote=1000.0)
     agent = RandomAgent(
         action_weights=random_action_weights,
         position_weights=random_position_weights,
         price_delta_std=2.5,
-        min_amount=1.0,
-        max_amount=5.0,
+        min_amount=0.0,
+        max_amount=3.0,
         account=account,
-        period=1.0,
-        jitter=0.5,
+        period=0.5,
+        jitter=0.25,
     )
     sim.attach_agent(agent)
     last_random = agent
@@ -76,7 +87,7 @@ fundamentalist_action_weights = {
     FundamentalistAgent.Action.ORDER: 0.6,
     FundamentalistAgent.Action.CANCEL: 0.4,
 }
-fundamentalist_count = 20
+fundamentalist_count = 5
 for _ in range(fundamentalist_count):
     account = Account(quote=1000.0)
     agent = FundamentalistAgent(
@@ -106,17 +117,18 @@ chartist_position_weights = {
 inst_sentiment = SentimentIndex(sim=sim)
 hist_sentiment = sim.track_indicator(inst_sentiment, 1.0)
 hist_chande = sim.track_indicator(
-    ChandeMomentum(prices=hist_prices, window=5.0, sim=sim), 1.0
+    ChandeMomentum(prices=hist_prices, window=5.0, sim=sim), hist_prices
 )
 hist_correlation = sim.track_indicator(
-    PearsonCorrelation(prices=hist_prices, window=13.0, strict=False, sim=sim), 1.0
+    PearsonCorrelation(prices=hist_prices, window=13.0, strict=False, sim=sim),
+    hist_prices,
 )
 chartist_indicator_weights = {
     inst_sentiment: 1.0,
-    hist_chande: 2.0,
+    hist_chande: 1.5,
     hist_correlation: 0.8,
 }
-chartist_count = 15
+chartist_count = 5
 for _ in range(chartist_count):
     account = Account(quote=1000.0)
     agent = ChartistAgent(
@@ -135,26 +147,69 @@ for _ in range(chartist_count):
     sim.attach_agent(agent)
     last_chartist = agent
 
-hist_volatility = sim.track_indicator(
-    HistoricalVolatility(prices=hist_prices, window=8.0, strict=False, sim=sim), 1.0
+mm_period = 2.0
+mm_hist_prices = sim.track_indicator(MarketPrices(sim=sim), mm_period * 0.5)
+mm_hist_volatility = sim.track_indicator(
+    HistoricalVolatility(
+        target=mm_hist_prices,
+        field="mid",
+        window=mm_period * 5.0,
+        strict=False,
+        sim=sim,
+    ),
+    mm_hist_prices,
 )
-marketmaker_count = 5
+marketmaker_count = 7
 for _ in range(marketmaker_count):
     account = Account(quote=1000.0)
     agent = MarketMakerAgent(
-        amount_limit=5.0,
-        volatility=hist_volatility,
+        amount_limit=2.0,
+        volatility=mm_hist_volatility,
         account=account,
-        period=2.0,
-        jitter=1.0,
+        period=mm_period,
+        jitter=mm_period * 0.5,
     )
     sim.attach_agent(agent)
     last_marketmaker = agent
 
 duration = 500.0
 event_timestamp = 250.0
-# sim.schedule_absolute(events.fundamental_value_shock(sim, -20.0), event_timestamp)
+sim.schedule_absolute(events.market_price_shock(sim, -10.0), event_timestamp)
 sim.run(duration)
+
+# shock_price_dt_pct = -0.10
+# shock_target = 0.0
+# shock_price = 0.0
+#
+#
+# async def price_shock() -> None:
+#     global sim, shock_price, shock_target, shock_price_dt_pct
+#     vol_mean = hist_return_vol.history()["value"].mean()
+#     vol_std = hist_return_vol.history()["value"].std()
+#     shock_target = vol_mean + vol_std
+#     shock_price = hist_prices.values()["mid"]
+#     await events.market_price_shock(sim, shock_price * shock_price_dt_pct)
+#
+#
+# sim.schedule_absolute(price_shock(), event_timestamp)
+# sim.run(duration)
+#
+# eq_time = 0.0
+# for _, row in history.slice_absolute(
+#     hist_return_vol.history(), event_timestamp, None
+# ).iterrows():
+#     if row["timestamp"] <= event_timestamp:
+#         continue
+#     if row["value"] <= shock_target:
+#         eq_time = row["timestamp"]
+#         break
+#
+# if eq_time >= event_timestamp:
+#     eq_price_index = history.index_absolute(hist_prices.history(), eq_time)
+#     eq_price = hist_prices.history().iloc[eq_price_index]["mid"]
+#     eq_price_dt_pct = (eq_price - shock_price) / shock_price
+#     eq_time_dt = eq_time - event_timestamp
+#     print(f"{eq_time_dt},{eq_price_dt_pct}")
 
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, height_ratios=(5.0, 1.5, 1.0))
 ax1.plot(
@@ -196,13 +251,16 @@ ax2.plot(
 )
 ax2.legend()
 
-returns = hist_prices.history()["mid"].diff().iloc[1:]
-
-ax3.bar(
-    hist_prices.history()["timestamp"].iloc[1:],
-    returns.abs(),
-    label="Absolute returns",
+ax3.plot(
+    hist_return_vol.history()["timestamp"],
+    hist_return_vol.history()["value"],
+    label="Return volatility"
 )
+# ax3.bar(
+#     hist_return.history()["timestamp"],
+#     hist_return.history()["value"].abs(),
+#     label="Absolute returns",
+# )
 ax3.legend()
 
 plt.show()

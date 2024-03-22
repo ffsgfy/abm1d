@@ -38,6 +38,18 @@ class MarketDepth(Indicator):
         }
 
 
+class MarketReturn(ScalarIndicator):
+    def __init__(self, *, prices: HistoryIndicator, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.prices = prices
+
+    def values(self) -> dict[str, float]:
+        history = self.prices.history()
+        if len(history) > 1:
+            return self._wrap(history.iloc[-1]["mid"] - history.iloc[-2]["mid"])
+        return self._wrap(0.0)
+
+
 class SentimentIndex(ScalarIndicator):
     def values(self) -> dict[str, float]:
         if self.sim.sentiment_limit > 0.0:
@@ -79,7 +91,10 @@ class ChandeMomentum(ScalarIndicator, WindowIndicator):
     def window_values(self, window: pd.DataFrame) -> dict[str, float]:
         prices = window["mid"]
         returns = prices.array[1:] - prices.array[:-1]
-        return self._wrap(np.sum(returns) / np.sum(np.abs(returns)))
+        total = np.sum(np.abs(returns))
+        if math.isclose(total, 0.0):
+            return self._wrap(0.0)
+        return self._wrap(np.sum(returns) / total)
 
 
 class PearsonCorrelation(ScalarIndicator, WindowIndicator):
@@ -96,8 +111,9 @@ class PearsonCorrelation(ScalarIndicator, WindowIndicator):
 
 
 class HistoricalVolatility(ScalarIndicator, WindowIndicator):
-    def __init__(self, *, prices: HistoryIndicator, **kwargs) -> None:
-        super().__init__(target=prices, **kwargs)
+    def __init__(self, *, target: HistoryIndicator, field: str, **kwargs) -> None:
+        super().__init__(target=target, **kwargs)
+        self.field = field
 
     def window_values(self, window: pd.DataFrame) -> dict[str, float]:
-        return self._wrap(window["mid"].std())
+        return self._wrap(window[self.field].std())

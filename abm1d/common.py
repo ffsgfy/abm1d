@@ -36,24 +36,31 @@ class MarketSimulation(Simulation):
 
     @overload
     def track_indicator(
-        self, indicator: ScalarIndicator, period: float
+        self, indicator: ScalarIndicator, period: float | HistoryIndicator
     ) -> ScalarHistoryIndicator:
         ...
 
     @overload
     def track_indicator(
-        self, indicator: Indicator, period: float
+        self, indicator: Indicator, period: float | HistoryIndicator
     ) -> HistoryIndicator:
         ...
 
-    def track_indicator(self, indicator: Indicator, period: float) -> HistoryIndicator:
+    def track_indicator(
+        self, indicator: Indicator, period: float | HistoryIndicator,
+    ) -> HistoryIndicator:
         if indicator in self.history:
             raise RuntimeError("Indicator already being tracked")
 
-        agent = HistoryAgent(indicator=indicator, period=period)
+        if isinstance(period, HistoryIndicator):
+            agent = self.history_agents[period.indicator]
+        else:
+            agent = HistoryAgent(period=float(period))
+            self.attach_agent(agent)
+
+        agent.indicators.append(indicator)
         self.history[indicator] = utils.history.make(indicator.fields())
         self.history_agents[indicator] = agent
-        self.attach_agent(agent)
 
         if isinstance(indicator, ScalarIndicator):
             return ScalarHistoryIndicator(indicator=indicator, sim=self)
@@ -216,16 +223,17 @@ class ScalarHistoryIndicator(ScalarIndicator, HistoryIndicator):
 
 
 class HistoryAgent(PeriodicMarketAgent):
-    def __init__(self, *, indicator: Indicator, period: float, **kwargs) -> None:
+    def __init__(self, *, period: float, **kwargs) -> None:
         # NOTE: no jitter in history
         super().__init__(period=period, jitter=0.0, eager=True, **kwargs)
-        self.indicator = indicator
+        self.indicators: list[Indicator] = []
 
     async def run(self) -> None:
-        if values := self.indicator.values():
-            utils.history.append(
-                self.sim.history[self.indicator], utils.current_time(), values
-            )
+        for indicator in self.indicators:
+            if values := indicator.values():
+                utils.history.append(
+                    self.sim.history[indicator], utils.current_time(), values
+                )
 
 
 class TraderAgent(Agent):

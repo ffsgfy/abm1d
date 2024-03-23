@@ -27,7 +27,7 @@ class ChartistAgent(TraderAgent, PeriodicMarketAgent):
         action_weights: dict[Action, float],
         position_weights: dict[Position, float],
         indicator_weights: dict[ScalarIndicator, float],
-        price_delta_std: float,
+        price_delta_mean: float,
         min_amount: float,
         max_amount: float,
         sentiment_p0: float,  # probability for score=0
@@ -42,7 +42,7 @@ class ChartistAgent(TraderAgent, PeriodicMarketAgent):
         self._position_cum_weights = utils.cum_weights(position_weights.values())
         # NOTE: all indicators must return values in range [-1, 1]
         self.indicator_weights = indicator_weights.copy()
-        self.price_delta_std = price_delta_std
+        self.price_delta_mean = price_delta_mean
         self.min_amount = min_amount
         self.max_amount = max_amount
         self.sentiment_p0 = utils.check_probability(sentiment_p0)
@@ -89,7 +89,7 @@ class ChartistAgent(TraderAgent, PeriodicMarketAgent):
             case self.Position.INSIDE_SPREAD:
                 price = random.uniform(best_bid_price, best_ask_price)
             case self.Position.OUTSIDE_SPREAD:
-                delta = random.expovariate(1.0 / self.price_delta_std)
+                delta = random.expovariate(1.0 / self.price_delta_mean)
                 price = best_price + sign * delta
             case _ as never_position:
                 assert_never(never_position)

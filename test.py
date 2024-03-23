@@ -72,7 +72,7 @@ for _ in range(random_count):
     agent = RandomAgent(
         action_weights=random_action_weights,
         position_weights=random_position_weights,
-        price_delta_std=2.5,
+        price_delta_mean=2.5,
         min_amount=0.0,
         max_amount=3.0,
         account=account,
@@ -92,7 +92,7 @@ for _ in range(fundamentalist_count):
     account = Account(quote=1000.0)
     agent = FundamentalistAgent(
         action_weights=fundamentalist_action_weights,
-        price_delta_std=2.5,
+        price_delta_mean=2.5,
         amount_gamma=0.005,
         min_amount=0.0,
         max_amount=5.0,
@@ -135,7 +135,7 @@ for _ in range(chartist_count):
         action_weights=chartist_action_weights,
         position_weights=chartist_position_weights,
         indicator_weights=chartist_indicator_weights,
-        price_delta_std=2.5,
+        price_delta_mean=2.5,
         min_amount=0.0,
         max_amount=5.0,
         sentiment_p0=0.4,

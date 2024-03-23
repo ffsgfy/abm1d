@@ -25,7 +25,7 @@ class RandomAgent(TraderAgent, PeriodicMarketAgent):
         *,
         action_weights: dict[Action, float],
         position_weights: dict[Position, float],
-        price_delta_std: float,
+        price_delta_mean: float,
         min_amount: float,
         max_amount: float,
         **kwargs,
@@ -36,7 +36,7 @@ class RandomAgent(TraderAgent, PeriodicMarketAgent):
         self._action_cum_weights = utils.cum_weights(action_weights.values())
         self._positions = list(position_weights.keys())
         self._position_cum_weights = utils.cum_weights(position_weights.values())
-        self.price_delta_std = price_delta_std
+        self.price_delta_mean = price_delta_mean
         self.min_amount = min_amount
         self.max_amount = max_amount
 
@@ -54,7 +54,7 @@ class RandomAgent(TraderAgent, PeriodicMarketAgent):
             case self.Position.INSIDE_SPREAD:
                 return random.uniform(best_bid_price, best_ask_price)
             case self.Position.OUTSIDE_SPREAD:
-                delta = random.expovariate(1.0 / self.price_delta_std)
+                delta = random.expovariate(1.0 / self.price_delta_mean)
                 match side:
                     case OrderSide.BID:
                         return best_bid_price - delta

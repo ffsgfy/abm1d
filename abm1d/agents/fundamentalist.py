@@ -18,7 +18,7 @@ class FundamentalistAgent(TraderAgent, PeriodicMarketAgent):
         self,
         *,
         action_weights: dict[Action, float],
-        price_delta_std: float,
+        price_delta_mean: float,
         amount_gamma: float,
         min_amount: float,
         max_amount: float,
@@ -28,7 +28,7 @@ class FundamentalistAgent(TraderAgent, PeriodicMarketAgent):
 
         self._actions = list(action_weights.keys())
         self._action_cum_weights = utils.cum_weights(action_weights.values())
-        self.price_delta_std = price_delta_std
+        self.price_delta_mean = price_delta_mean
         self.amount_gamma = amount_gamma
         self.min_amount = min_amount
         self.max_amount = max_amount
@@ -37,7 +37,7 @@ class FundamentalistAgent(TraderAgent, PeriodicMarketAgent):
         return random.choice(tuple(OrderSide))
 
     def _sample_price(self, side: OrderSide, price_fun: float) -> float:
-        delta = random.expovariate(1.0 / self.price_delta_std)
+        delta = random.expovariate(1.0 / self.price_delta_mean)
         match side:
             case OrderSide.BID:
                 return (price_fun - delta) * (1.0 - self.exchange.commission)

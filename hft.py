@@ -1,7 +1,9 @@
 import datetime
-import random
 import itertools
+import random
+from collections import namedtuple
 
+import joblib
 from tqdm import tqdm
 
 from abm1d import events
@@ -23,22 +25,13 @@ from abm1d.indicators import (
 )
 from abm1d.utils import history
 
-seed = 1186796360058043791
-outpath = f"out/{datetime.datetime.now().replace(microsecond=0).isoformat()}.csv"
+Params = namedtuple(
+    "Params", ["advantage", "n_random", "n_fund", "n_chart", "n_mm_slow", "n_mm_fast"]
+)
+Result = namedtuple("Result", ["time_dt", "price_dt"])
 
-with open(outpath, "w") as file:
-    file.write("advantage,time_dt,price_dt\n")
 
-
-def simulate(
-    n_random: int,
-    n_fund: int,
-    n_chart: int,
-    n_mm_slow: int,
-    n_mm_fast: int,
-    advantage: float,
-):
-    global seed, outpath
+def simulate(params: Params, seed: int, outpath: str) -> tuple[Params, Result]:
     random.seed(seed)
 
     simulation_time = 500.0
@@ -55,40 +48,44 @@ def simulate(
     environment.pregenerate_dividends(int(simulation_time))
     sim = MarketSimulation(exchange=exchange, environment=environment)
 
-    for _ in range(n_random):
-        sim.attach_agent(RandomAgent(
-            action_weights={
-                RandomAgent.Action.MARKET: 0.2,
-                RandomAgent.Action.LIMIT: 0.4,
-                RandomAgent.Action.CANCEL: 0.2,
-                RandomAgent.Action.NOOP: 0.2,
-            },
-            position_weights={
-                RandomAgent.Position.INSIDE_SPREAD: 0.3,
-                RandomAgent.Position.OUTSIDE_SPREAD: 0.7,
-            },
-            price_delta_mean=2.5,
-            min_amount=0.0,
-            max_amount=3.0,
-            account=Account(quote=1000.0),
-            period=0.5,
-            jitter=0.25,
-        ))
+    for _ in range(params.n_random):
+        sim.attach_agent(
+            RandomAgent(
+                action_weights={
+                    RandomAgent.Action.MARKET: 0.2,
+                    RandomAgent.Action.LIMIT: 0.4,
+                    RandomAgent.Action.CANCEL: 0.2,
+                    RandomAgent.Action.NOOP: 0.2,
+                },
+                position_weights={
+                    RandomAgent.Position.INSIDE_SPREAD: 0.3,
+                    RandomAgent.Position.OUTSIDE_SPREAD: 0.7,
+                },
+                price_delta_mean=2.5,
+                min_amount=0.0,
+                max_amount=3.0,
+                account=Account(quote=1000.0),
+                period=0.5,
+                jitter=0.25,
+            )
+        )
 
-    for _ in range(n_fund):
-        sim.attach_agent(FundamentalistAgent(
-            action_weights={
-                FundamentalistAgent.Action.ORDER: 0.6,
-                FundamentalistAgent.Action.CANCEL: 0.4,
-            },
-            price_delta_mean=2.5,
-            amount_gamma=0.005,
-            min_amount=0.0,
-            max_amount=5.0,
-            account=Account(quote=1000.0),
-            period=1.0,
-            jitter=0.5,
-        ))
+    for _ in range(params.n_fund):
+        sim.attach_agent(
+            FundamentalistAgent(
+                action_weights={
+                    FundamentalistAgent.Action.ORDER: 0.6,
+                    FundamentalistAgent.Action.CANCEL: 0.4,
+                },
+                price_delta_mean=2.5,
+                amount_gamma=0.005,
+                min_amount=0.0,
+                max_amount=5.0,
+                account=Account(quote=1000.0),
+                period=1.0,
+                jitter=0.5,
+            )
+        )
 
     ind_prices = sim.track_indicator(MarketPrices(sim=sim), 1.0)
     ind_sentiment = SentimentIndex(sim=sim)
@@ -100,32 +97,34 @@ def simulate(
         ind_prices,
     )
 
-    for _ in range(n_chart):
-        sim.attach_agent(ChartistAgent(
-            action_weights={
-                ChartistAgent.Action.MARKET: 0.2,
-                ChartistAgent.Action.LIMIT: 0.4,
-                ChartistAgent.Action.CANCEL: 0.2,
-                ChartistAgent.Action.NOOP: 0.2,
-            },
-            position_weights={
-                ChartistAgent.Position.INSIDE_SPREAD: 0.3,
-                ChartistAgent.Position.OUTSIDE_SPREAD: 0.7,
-            },
-            indicator_weights={
-                ind_sentiment: 1.0,
-                ind_chande: 1.5,
-                ind_correlation: 0.8,
-            },
-            price_delta_mean=2.5,
-            min_amount=0.0,
-            max_amount=5.0,
-            sentiment_p0=0.4,
-            sentiment_p1=0.9,
-            account=Account(quote=1000.0),
-            period=1.0,
-            jitter=0.5,
-        ))
+    for _ in range(params.n_chart):
+        sim.attach_agent(
+            ChartistAgent(
+                action_weights={
+                    ChartistAgent.Action.MARKET: 0.2,
+                    ChartistAgent.Action.LIMIT: 0.4,
+                    ChartistAgent.Action.CANCEL: 0.2,
+                    ChartistAgent.Action.NOOP: 0.2,
+                },
+                position_weights={
+                    ChartistAgent.Position.INSIDE_SPREAD: 0.3,
+                    ChartistAgent.Position.OUTSIDE_SPREAD: 0.7,
+                },
+                indicator_weights={
+                    ind_sentiment: 1.0,
+                    ind_chande: 1.5,
+                    ind_correlation: 0.8,
+                },
+                price_delta_mean=2.5,
+                min_amount=0.0,
+                max_amount=5.0,
+                sentiment_p0=0.4,
+                sentiment_p1=0.9,
+                account=Account(quote=1000.0),
+                period=1.0,
+                jitter=0.5,
+            )
+        )
 
     slow_period = 2.0
     slow_prices = sim.track_indicator(MarketPrices(sim=sim), slow_period * 0.5)
@@ -140,16 +139,18 @@ def simulate(
         slow_prices,
     )
 
-    for _ in range(n_mm_slow):
-        sim.attach_agent(MarketMakerAgent(
-            amount_limit=2.0,
-            volatility=slow_volatility,
-            account=Account(quote=1000.0),
-            period=slow_period,
-            jitter=slow_period * 0.5,
-        ))
+    for _ in range(params.n_mm_slow):
+        sim.attach_agent(
+            MarketMakerAgent(
+                amount_limit=2.0,
+                volatility=slow_volatility,
+                account=Account(quote=1000.0),
+                period=slow_period,
+                jitter=slow_period * 0.5,
+            )
+        )
 
-    fast_period = slow_period / advantage
+    fast_period = slow_period / params.advantage
     fast_prices = sim.track_indicator(MarketPrices(sim=sim), fast_period * 0.5)
     fast_volatility = sim.track_indicator(
         HistoricalVolatility(
@@ -162,14 +163,16 @@ def simulate(
         fast_prices,
     )
 
-    for _ in range(n_mm_fast):
-        sim.attach_agent(MarketMakerAgent(
-            amount_limit=2.0,
-            volatility=fast_volatility,
-            account=Account(quote=1000.0),
-            period=fast_period,
-            jitter=fast_period * 0.5,
-        ))
+    for _ in range(params.n_mm_fast):
+        sim.attach_agent(
+            MarketMakerAgent(
+                amount_limit=2.0,
+                volatility=fast_volatility,
+                account=Account(quote=1000.0),
+                period=fast_period,
+                jitter=fast_period * 0.5,
+            )
+        )
 
     ind_return = sim.track_indicator(
         MarketReturn(prices=ind_prices, sim=sim), ind_prices
@@ -213,18 +216,33 @@ def simulate(
     eq_price = ind_prices.history().iloc[eq_price_index]["mid"]
     eq_price_dt_pct = (eq_price - shock_price) / shock_price
     eq_time_dt = eq_time - shock_time
-
-    with open(outpath, "a") as outfile:
-        outfile.write(f"{advantage},{eq_time_dt},{eq_price_dt_pct}\n")
+    return (params, Result(eq_time_dt, eq_price_dt_pct))
 
 
-rng_random = range(4, 10)
-rng_fund = range(4, 10)
-rng_chart = range(4, 10)
-rng_mm_slow = range(2, 4)
-n_mm_fast = 5
+@joblib.delayed
+def simulate_delayed(params: Params, seed: int, outpath: str) -> Result:
+    return simulate(params, seed, outpath)
 
-combos = list(itertools.product(rng_random, rng_fund, rng_chart, rng_mm_slow))
-for advantage in (1.0, 2.0, 4.0, 7.0, 10.0):
-    for n_random, n_fund, n_chart, n_mm_slow in tqdm(combos, desc=str(advantage)):
-        simulate(n_random, n_fund, n_chart, n_mm_slow, n_mm_fast, advantage)
+
+now = datetime.datetime.now().replace(microsecond=0)
+outpath = f"out/{now.isoformat().replace(':', '-')}.csv"
+print("Output path:", outpath)
+with open(outpath, "w") as file:
+    file.write(",".join(Params._fields + Result._fields) + "\n")
+
+seed = 1186796360058043791
+param_values = {
+    "advantage": [1.0, 2.0, 4.0, 7.0, 11.0, 16.0],
+    "n_random": range(4, 10),
+    "n_fund": range(4, 10),
+    "n_chart": range(4, 10),
+    "n_mm_slow": [2, 3],
+    "n_mm_fast": [5],
+}
+param_combos = [Params(*p) for p in itertools.product(*param_values.values())]
+
+parallel = joblib.Parallel(n_jobs=10, return_as="generator")
+tasks = [simulate_delayed(params, seed, outpath) for params in param_combos]
+for params, result in tqdm(parallel(tasks), total=len(tasks)):
+    with open(outpath, "a") as file:
+        file.write(",".join(map(str, params + result)) + "\n")

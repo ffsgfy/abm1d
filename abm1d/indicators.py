@@ -117,3 +117,40 @@ class HistoricalVolatility(ScalarIndicator, WindowIndicator):
 
     def window_values(self, window: pd.DataFrame) -> dict[str, float]:
         return self._wrap(window[self.field].std())
+
+
+class ExponentialSmoothing(ScalarIndicator):
+    def __init__(
+        self,
+        *,
+        target: Indicator,
+        field: str,
+        alpha: float,
+        step: float = 1.0,
+        **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+
+        self.target = target
+        self.field = field
+        self.alpha = min(max(alpha, 0.0), 1.0)
+        self.step = max(step, utils.machine_epsilon())
+        self._timestamp = math.inf
+        self._value = 0.0
+
+    def values(self) -> dict[str, float] | None:
+        values = self.target.values()
+        if not values:
+            return None
+
+        value = values[self.field]
+        curtime = utils.current_time()
+        timedelta = curtime - self._timestamp
+        if timedelta < 0.0 or self.alpha >= 1.0:
+            self._value = value
+        else:
+            momentum = (1.0 - self.alpha) ** (timedelta / self.step)
+            self._value = self._value * momentum + value * (1.0 - momentum)
+
+        self._timestamp = curtime
+        return self._wrap(self._value)

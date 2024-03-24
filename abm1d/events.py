@@ -1,5 +1,3 @@
-import itertools
-
 from abm1d.common import MarketSimulation
 from abm1d.exchange import Order, OrderSide
 
@@ -14,7 +12,7 @@ async def fundamental_value_shock(sim: MarketSimulation, price_delta: float) -> 
 async def market_price_shock(sim: MarketSimulation, price_delta: float) -> None:
     order_capacities: dict[Order, float] = {}
 
-    for order in itertools.chain(sim.exchange.bids, sim.exchange.asks):
+    for order in list(sim.exchange.bids) + list(sim.exchange.asks):
         order_capacities[order] = order.capacity
         sim.exchange.cancel_order(order)
 

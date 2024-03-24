@@ -1,5 +1,6 @@
 import math
 import warnings
+from typing import Callable, Iterable
 
 import numpy as np
 import pandas as pd
@@ -154,3 +155,19 @@ class ExponentialSmoothing(ScalarIndicator):
 
         self._timestamp = curtime
         return self._wrap(self._value)
+
+
+class ScalarFunction(ScalarIndicator):
+    def __init__(
+        self, *, target: Callable[..., float], args: Iterable[ScalarIndicator], **kwargs
+    ) -> None:
+        super().__init__(**kwargs)
+
+        self.target = target
+        self.args = list(args)
+
+    def values(self) -> dict[str, float] | None:
+        args = [x.value() for x in self.args]
+        if None in args:
+            return None
+        return self._wrap(self.target(*args))

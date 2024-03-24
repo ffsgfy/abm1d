@@ -1,5 +1,6 @@
 import datetime
 import itertools
+import math
 import random
 from collections import namedtuple
 
@@ -13,7 +14,7 @@ from abm1d.agents import (
     MarketMakerAgent,
     RandomAgent,
 )
-from abm1d.common import EnvironmentAgent, MarketSimulation
+from abm1d.common import EnvironmentAgent, MarketSimulation, indicator_sim
 from abm1d.exchange import Account, Exchange
 from abm1d.indicators import (
     ChandeMomentum,
@@ -22,6 +23,8 @@ from abm1d.indicators import (
     MarketReturn,
     PearsonCorrelation,
     SentimentIndex,
+    ScalarFunction,
+    ExponentialSmoothing,
 )
 from abm1d.utils import history
 
@@ -87,15 +90,16 @@ def simulate(params: Params, seed: int, outpath: str) -> tuple[Params, Result]:
             )
         )
 
-    ind_prices = sim.track_indicator(MarketPrices(sim=sim), 1.0)
-    ind_sentiment = SentimentIndex(sim=sim)
-    ind_chande = sim.track_indicator(
-        ChandeMomentum(prices=ind_prices, window=5.0, sim=sim), ind_prices
-    )
-    ind_correlation = sim.track_indicator(
-        PearsonCorrelation(prices=ind_prices, window=13.0, strict=False, sim=sim),
-        ind_prices,
-    )
+    with indicator_sim(sim):
+        ind_prices = sim.track_indicator(MarketPrices(), 1.0)
+        ind_sentiment = SentimentIndex()
+        ind_chande = sim.track_indicator(
+            ChandeMomentum(prices=ind_prices, window=5.0), ind_prices
+        )
+        ind_correlation = sim.track_indicator(
+            PearsonCorrelation(prices=ind_prices, window=13.0, strict=False),
+            ind_prices,
+        )
 
     for _ in range(params.n_chart):
         sim.attach_agent(
@@ -126,61 +130,73 @@ def simulate(params: Params, seed: int, outpath: str) -> tuple[Params, Result]:
             )
         )
 
-    slow_period = 2.0
-    slow_prices = sim.track_indicator(MarketPrices(sim=sim), slow_period * 0.5)
-    slow_volatility = sim.track_indicator(
-        HistoricalVolatility(
-            target=slow_prices,
-            field="mid",
-            window=slow_period * 5.0,
-            strict=False,
-            sim=sim,
-        ),
-        slow_prices,
-    )
+    with indicator_sim(sim):
+        slow_period = 2.0
+        slow_prices = sim.track_indicator(MarketPrices(), slow_period * 0.5)
+        slow_volatility = sim.track_indicator(
+            HistoricalVolatility(
+                target=slow_prices,
+                field="mid",
+                window=slow_period * 5.0,
+                strict=False,
+            ),
+            slow_prices,
+        )
 
-    for _ in range(params.n_mm_slow):
+        fast_period = slow_period / params.advantage
+        fast_prices = sim.track_indicator(MarketPrices(), fast_period * 0.5)
+        fast_volatility = sim.track_indicator(
+            HistoricalVolatility(
+                target=fast_prices,
+                field="mid",
+                window=fast_period * 5.0,
+                strict=False,
+            ),
+            fast_prices,
+        )
+
+    for i in range(params.n_mm_slow + params.n_mm_fast):
+        if i < params.n_mm_slow:
+            period = slow_period
+            volatility = slow_volatility
+        else:
+            period = fast_period
+            volatility = fast_volatility
+
         sim.attach_agent(
             MarketMakerAgent(
                 amount_limit=2.0,
-                volatility=slow_volatility,
+                volatility=volatility,
                 account=Account(quote=1000.0),
-                period=slow_period,
-                jitter=slow_period * 0.5,
+                period=period,
+                jitter=period * 0.5,
             )
         )
 
-    fast_period = slow_period / params.advantage
-    fast_prices = sim.track_indicator(MarketPrices(sim=sim), fast_period * 0.5)
-    fast_volatility = sim.track_indicator(
-        HistoricalVolatility(
-            target=fast_prices,
-            field="mid",
-            window=fast_period * 5.0,
-            strict=False,
-            sim=sim,
-        ),
-        fast_prices,
-    )
-
-    for _ in range(params.n_mm_fast):
-        sim.attach_agent(
-            MarketMakerAgent(
-                amount_limit=2.0,
-                volatility=fast_volatility,
-                account=Account(quote=1000.0),
-                period=fast_period,
-                jitter=fast_period * 0.5,
-            )
+    with indicator_sim(sim):
+        ema_alpha = 0.2
+        ind_return = sim.track_indicator(MarketReturn(prices=ind_prices), ind_prices)
+        ind_return_volatility = sim.track_indicator(
+            ScalarFunction(
+                target=math.sqrt,
+                args=[
+                    ExponentialSmoothing(
+                        target=ScalarFunction(
+                            target=lambda lhs, rhs: (lhs - rhs) ** 2,
+                            args=[
+                                ind_return,
+                                ExponentialSmoothing(
+                                    target=ind_return, field="value", alpha=ema_alpha
+                                ),
+                            ],
+                        ),
+                        field="value",
+                        alpha=ema_alpha,
+                    )
+                ],
+            ),
+            ind_return,
         )
-
-    ind_return = sim.track_indicator(
-        MarketReturn(prices=ind_prices, sim=sim), ind_prices
-    )
-    ind_return_volatility = sim.track_indicator(
-        HistoricalVolatility(target=ind_return, field="value", window=8.0, sim=sim),
-        ind_return,
-    )
 
     shock_time = simulation_time * 0.5
     shock_price_dt_pct = -0.10
@@ -236,12 +252,12 @@ param_values = {
     "n_random": range(4, 10),
     "n_fund": range(4, 10),
     "n_chart": range(4, 10),
-    "n_mm_slow": [2, 3],
-    "n_mm_fast": [5],
+    "n_mm_slow": [1, 2],
+    "n_mm_fast": [4],
 }
 param_combos = [Params(*p) for p in itertools.product(*param_values.values())]
 
-parallel = joblib.Parallel(n_jobs=10, return_as="generator")
+parallel = joblib.Parallel(n_jobs=16, return_as="generator")
 tasks = [simulate_delayed(params, seed, outpath) for params in param_combos]
 for params, result in tqdm(parallel(tasks), total=len(tasks)):
     with open(outpath, "a") as file:

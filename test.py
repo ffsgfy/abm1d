@@ -1,8 +1,8 @@
+import math
 import random
 import time
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 from abm1d import events
 from abm1d.agents import (
@@ -11,18 +11,25 @@ from abm1d.agents import (
     MarketMakerAgent,
     RandomAgent,
 )
-from abm1d.common import Agent, EnvironmentAgent, MarketSimulation
+from abm1d.common import (
+    Agent,
+    EnvironmentAgent,
+    MarketSimulation,
+    indicator_sim,
+)
 from abm1d.exchange import Account, Exchange
 from abm1d.indicators import (
     ChandeMomentum,
     HistoricalVolatility,
-    MarketDepth,
     MarketPrices,
     MarketReturn,
     PearsonCorrelation,
     SentimentIndex,
+    ExponentialSmoothing,
+    ScalarFunction,
 )
 from abm1d.utils import history
+
 
 seed = hash(time.time())
 seed = 1186796360058043791
@@ -43,17 +50,32 @@ environment.pregenerate_dividends(500)
 sim = MarketSimulation(exchange=exchange, environment=environment)
 agent: Agent
 
-hist_depth = sim.track_indicator(MarketDepth(sim=sim), 1.0)
-hist_prices = sim.track_indicator(MarketPrices(sim=sim), 1.0)
-hist_return = sim.track_indicator(
-    MarketReturn(prices=hist_prices, sim=sim), hist_prices
-)
-hist_return_vol = sim.track_indicator(
-    HistoricalVolatility(
-        target=hist_return, field="value", window=8.0, strict=False, sim=sim
-    ),
-    hist_return,
-)
+with indicator_sim(sim):
+    hist_prices = sim.track_indicator(MarketPrices(), 1.0)
+    hist_return = sim.track_indicator(MarketReturn(prices=hist_prices), hist_prices)
+
+    alpha = 0.2
+    hist_return_vol = sim.track_indicator(
+        ScalarFunction(
+            target=math.sqrt,
+            args=[
+                ExponentialSmoothing(
+                    target=ScalarFunction(
+                        target=(lambda lhs, rhs: (lhs - rhs) ** 2),
+                        args=[
+                            hist_return,
+                            ExponentialSmoothing(
+                                target=hist_return, field="value", alpha=alpha
+                            ),
+                        ],
+                    ),
+                    field="value",
+                    alpha=alpha,
+                )
+            ],
+        ),
+        hist_return,
+    )
 
 # Random
 random_action_weights = {
@@ -114,15 +136,15 @@ chartist_position_weights = {
     ChartistAgent.Position.INSIDE_SPREAD: 0.3,
     ChartistAgent.Position.OUTSIDE_SPREAD: 0.7,
 }
-inst_sentiment = SentimentIndex(sim=sim)
-hist_sentiment = sim.track_indicator(inst_sentiment, 1.0)
-hist_chande = sim.track_indicator(
-    ChandeMomentum(prices=hist_prices, window=5.0, sim=sim), hist_prices
-)
-hist_correlation = sim.track_indicator(
-    PearsonCorrelation(prices=hist_prices, window=13.0, strict=False, sim=sim),
-    hist_prices,
-)
+with indicator_sim(sim):
+    inst_sentiment = SentimentIndex()
+    hist_sentiment = sim.track_indicator(inst_sentiment, 1.0)
+    hist_chande = sim.track_indicator(
+        ChandeMomentum(prices=hist_prices, window=5.0), hist_prices
+    )
+    hist_correlation = sim.track_indicator(
+        PearsonCorrelation(prices=hist_prices, window=13.0, strict=False), hist_prices
+    )
 chartist_indicator_weights = {
     inst_sentiment: 1.0,
     hist_chande: 1.5,
@@ -147,19 +169,19 @@ for _ in range(chartist_count):
     sim.attach_agent(agent)
     last_chartist = agent
 
-mm_period = 2.0
-mm_hist_prices = sim.track_indicator(MarketPrices(sim=sim), mm_period * 0.5)
-mm_hist_volatility = sim.track_indicator(
-    HistoricalVolatility(
-        target=mm_hist_prices,
-        field="mid",
-        window=mm_period * 5.0,
-        strict=False,
-        sim=sim,
-    ),
-    mm_hist_prices,
-)
-marketmaker_count = 7
+with indicator_sim(sim):
+    mm_period = 2.0
+    mm_hist_prices = sim.track_indicator(MarketPrices(), mm_period * 0.5)
+    mm_hist_volatility = sim.track_indicator(
+        HistoricalVolatility(
+            target=mm_hist_prices,
+            field="mid",
+            window=mm_period * 5.0,
+            strict=False,
+        ),
+        mm_hist_prices,
+    )
+marketmaker_count = 5
 for _ in range(marketmaker_count):
     account = Account(quote=1000.0)
     agent = MarketMakerAgent(
@@ -209,7 +231,7 @@ sim.run(duration)
 #     eq_price = hist_prices.history().iloc[eq_price_index]["mid"]
 #     eq_price_dt_pct = (eq_price - shock_price) / shock_price
 #     eq_time_dt = eq_time - event_timestamp
-#     print(f"{eq_time_dt},{eq_price_dt_pct}")
+#     print(f"{eq_time_dt}, {eq_price_dt_pct}")
 
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True, height_ratios=(5.0, 1.5, 1.0))
 ax1.plot(
@@ -254,8 +276,14 @@ ax2.legend()
 ax3.plot(
     hist_return_vol.history()["timestamp"],
     hist_return_vol.history()["value"],
-    label="Return volatility"
+    label="Return volatility",
 )
+ax3.axhline(shock_target, 0.0, 1.0, color="k", linestyle="--")
+# ax3.plot(
+#     hist_return.history()["timestamp"],
+#     hist_return.history()["value"],
+#     label="Returns",
+# )
 # ax3.bar(
 #     hist_return.history()["timestamp"],
 #     hist_return.history()["value"].abs(),

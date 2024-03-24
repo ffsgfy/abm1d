@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import math
 import random
 from collections import deque
-from collections.abc import Awaitable
+from collections.abc import Iterator, Awaitable
+from contextvars import ContextVar
 from typing import cast, overload
 
 import pandas as pd
@@ -174,9 +176,25 @@ class EnvironmentAgent(PeriodicMarketAgent):
         self._update_fundamental_value()
 
 
+_ctx_indicator_sim: ContextVar[MarketSimulation] = ContextVar("sim")
+
+
+@contextlib.contextmanager
+def indicator_sim(sim: MarketSimulation) -> Iterator[None]:
+    token = _ctx_indicator_sim.set(sim)
+    try:
+        yield
+    finally:
+        _ctx_indicator_sim.reset(token)
+
+
 class Indicator(Entity):
-    def __init__(self, *, sim: MarketSimulation, **kwargs) -> None:
+    def __init__(self, *, sim: MarketSimulation | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
+        if sim is None:
+            sim = _ctx_indicator_sim.get(None)
+        if sim is None:
+            raise RuntimeError("Missing simulation argument")
         self.sim = sim
 
     def fields(self) -> list[str]:

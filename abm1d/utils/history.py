@@ -9,10 +9,14 @@ def make(columns: Iterable[str]) -> pd.DataFrame:
 
 
 def append(df: pd.DataFrame, timestamp: float, values: dict[str, float]) -> None:
+    idx = len(df)
     if len(df) > 0:
-        if timestamp <= df.iloc[-1]["timestamp"]:
+        last = df.iloc[-1]["timestamp"]
+        if timestamp < last:
             raise RuntimeError("History timestamps must monotonically increase")
-    df.loc[len(df)] = {"timestamp": timestamp, **values}
+        elif timestamp == last:
+            idx = len(df) - 1
+    df.loc[idx] = {"timestamp": timestamp, **values}
 
 
 def offset_forward(df: pd.DataFrame, offset: float) -> float:

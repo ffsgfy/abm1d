@@ -278,7 +278,7 @@ ax3.plot(
     hist_return_vol.history()["value"],
     label="Return volatility",
 )
-ax3.axhline(shock_target, 0.0, 1.0, color="k", linestyle="--")
+# ax3.axhline(shock_target, 0.0, 1.0, color="k", linestyle="--")
 # ax3.plot(
 #     hist_return.history()["timestamp"],
 #     hist_return.history()["value"],
